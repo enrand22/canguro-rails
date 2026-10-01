@@ -1,0 +1,31 @@
+# Build artifacts
+bin/
+dist/
+*.exe
+
+# Coverage
+coverage.out
+coverage.filtered.out
+coverage.html
+
+# Env / secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+# The toolkit ships this file as a template (with the .tmpl suffix), and git would
+# otherwise ignore it: the file would be missing from a fresh clone and every
+# generated project would come out without .env.example.
+!.env.example.tmpl
+
+# Logs
+log/
+*.log
+
+# Generated templ files ARE committed (so consumers don't need templ), but the
+# tool's own cache isn't.
+*_templ.txt
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,16 @@
+# Build stage
+FROM golang:1.26 AS build
+WORKDIR /src
+
+# Dependencies first: they change less often than the code, so Docker caches them.
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o /out/[[.App]] ./cmd/[[.App]]
+
+# Run stage: no shell, no package manager, nothing to exploit.
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /out/[[.App]] /[[.App]]
+EXPOSE 8080
+ENTRYPOINT ["/[[.App]]"]

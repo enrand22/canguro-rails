@@ -1,0 +1,91 @@
+// Package config declara las variables de ESTE proyecto y delega la carga en el kit.
+//
+// La lógica —leer el entorno, validar, fallar al arrancar nombrando lo que falta—
+// vive en canguro-rails/config: acá sólo se declaran las variables y se exponen
+// como campos tipados, que es lo que conoce el resto del código.
+package config
+
+import (
+	"fmt"
+	"strings"
+
+	kitconfig "github.com/enrand22/canguro-rails/config"
+)
+
+// Config es la configuración de [[.Title]], ya validada.
+type Config struct {
+	Env           string
+	Port          string
+	DatabaseURL   string
+	SessionSecret string
+	BaseURL       string
+	Timezone      string
+	WorkerCount   int
+	LogLevel      string
+	LogFile       string
+}
+
+// vars declara las variables del proyecto. Las reglas (obligatoria, default,
+// rango) son las del kit.
+func vars() []kitconfig.Var {
+	return []kitconfig.Var{
+		kitconfig.EnvVar(),
+		{Name: "PORT", Default: "8080"},
+		kitconfig.RequiredVar("DATABASE_URL"),
+		kitconfig.RequiredVar("SESSION_SECRET"),
+		{Name: "BASE_URL", Default: "http://localhost:8080"},
+		{Name: "TZ", Default: "America/Tegucigalpa"},
+		{Name: "LOG_LEVEL", Default: "info"},
+		{Name: "LOG_FILE", Default: "log/[[.App]].log"},
+		kitconfig.IntVar("WORKERS", "4", 1, 64),
+	}
+}
+
+// Load lee el .env (si existe), toma las variables del entorno y valida todo.
+func Load() (*Config, error) {
+	loaded, err := kitconfig.Load(vars())
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := &Config{
+		Env:           loaded.Get("ENV"),
+		Port:          loaded.Get("PORT"),
+		DatabaseURL:   loaded.Get("DATABASE_URL"),
+		SessionSecret: loaded.Get("SESSION_SECRET"),
+		BaseURL:       loaded.Get("BASE_URL"),
+		Timezone:      loaded.Get("TZ"),
+		WorkerCount:   loaded.Int("WORKERS"),
+		LogLevel:      loaded.Get("LOG_LEVEL"),
+		LogFile:       loaded.Get("LOG_FILE"),
+	}
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// validate son las reglas propias del proyecto: hoy, que en producción la clave
+// con la que se firman las sesiones sea larga de verdad.
+func (c *Config) validate() error {
+	var missing []string
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		missing = append(missing, "DATABASE_URL")
+	}
+	if strings.TrimSpace(c.SessionSecret) == "" {
+		missing = append(missing, "SESSION_SECRET")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing configuration variables: %s", strings.Join(missing, ", "))
+	}
+	if c.IsProd() && len(c.SessionSecret) < 32 {
+		return fmt.Errorf("SESSION_SECRET must be at least 32 characters in production")
+	}
+	return nil
+}
+
+// Addr is the HTTP listen address.
+func (c *Config) Addr() string { return ":" + c.Port }
+
+// IsProd reports whether we are in production (changes Secure cookies, JSON logs).
+func (c *Config) IsProd() bool { return strings.EqualFold(c.Env, "production") }

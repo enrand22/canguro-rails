@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: [[.App]]_test
+          MYSQL_USER: [[.App]]
+          MYSQL_PASSWORD: [[.App]]
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: [[.App]]:[[.App]]@tcp(127.0.0.1:3306)/[[.App]]_test?parseTime=true&charset=utf8mb4&loc=UTC
+      TEST_DATABASE_URL: [[.App]]:[[.App]]@tcp(127.0.0.1:3306)/[[.App]]_test?parseTime=true&charset=utf8mb4&loc=UTC
+      # In CI the database MUST be there: a skip would hide a broken service.
+      REQUIRE_DB: "1"
+      SESSION_SECRET: ci-only-secret-with-at-least-32-characters
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install tools
+        run: go install github.com/a-h/templ/cmd/templ@latest github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Migrate the database
+        run: $(go env GOPATH)/bin/goose -dir migrations mysql "$DATABASE_URL" up
+
+      - name: Templ files are up to date
+        run: |
+          $(go env GOPATH)/bin/templ generate
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::the _templ.go files are stale: run 'make templ' and commit"
+            git diff --stat
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Tests (against a real MySQL)
+        run: go test ./... -count=1 -p 1
+
+      - name: Coverage gate (80%)
+        run: |
+          go test ./... -count=1 -p 1 -coverpkg=./internal/... -coverprofile=coverage.out
+          grep -vE '_templ\.go' coverage.out > coverage.filtered.out
+          pct=$(go tool cover -func=coverage.filtered.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "coverage: ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 < 80) }' || {
+            echo "::error::coverage below 80%"; exit 1; }

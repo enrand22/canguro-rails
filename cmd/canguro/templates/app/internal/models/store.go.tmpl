@@ -1,0 +1,82 @@
+// Package models es la ÚNICA capa que habla SQL.
+//
+// Si hay SQL fuera de acá, está mal (ver CONVENTIONS). Los servicios piden datos a
+// este paquete; los controladores nunca ven un *sqlx.DB.
+package models
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+
+	"github.com/enrand22/canguro-rails/dbx"
+)
+
+// ErrConflict: el dato ya existe (violación de unicidad).
+var ErrConflict = errors.New("the record already exists")
+
+// Item es la entidad de ejemplo. Borrala cuando el proyecto tenga dominio propio
+// (junto con su servicio, su pantalla y sus tests).
+type Item struct {
+	ID        int64     `db:"id" json:"id"`
+	Name      string    `db:"name" json:"name"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// Store reúne las consultas del proyecto.
+type Store struct {
+	db *sqlx.DB
+}
+
+// NewStore recibe el pool ya abierto (inyección explícita, nada de globales).
+func NewStore(db *sqlx.DB) *Store { return &Store{db: db} }
+
+// CreateItem guarda un item y traduce el duplicado a un error del dominio.
+//
+// Nota de MySQL: no hay INSERT ... RETURNING, así que se inserta y se relee lo
+// recién creado por el id que devuelve LastInsertId. Un RETURNING acá es un error
+// que sólo aparece en el primer deploy.
+func (s *Store) CreateItem(ctx context.Context, name string) (Item, error) {
+	result, err := s.db.ExecContext(ctx, `INSERT INTO items (name) VALUES (?)`, name)
+	if err != nil {
+		// Los duplicados se detectan por el NÚMERO de error de MySQL (1062), no por
+		// el texto del mensaje: el texto cambia con el idioma del servidor.
+		if dbx.IsDuplicate(dbx.MapError(err)) {
+			return Item{}, fmt.Errorf("%w: %s", ErrConflict, name)
+		}
+		return Item{}, fmt.Errorf("creating item: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Item{}, fmt.Errorf("reading the new id: %w", err)
+	}
+
+	var item Item
+	if err := s.db.GetContext(ctx, &item,
+		`SELECT id, name, created_at FROM items WHERE id = ?`, id); err != nil {
+		return Item{}, fmt.Errorf("reading back the created item: %w", err)
+	}
+	return item, nil
+}
+
+// ListItems devuelve los items más nuevos primero.
+func (s *Store) ListItems(ctx context.Context, limit int) ([]Item, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var items []Item
+	if err := s.db.SelectContext(ctx, &items,
+		`SELECT id, name, created_at FROM items ORDER BY id DESC LIMIT ?`, limit); err != nil {
+		return nil, fmt.Errorf("listing items: %w", err)
+	}
+	return items, nil
+}
+
+// Ping verifica que la base responda. Lo usa el health check: un 200 que miente
+// no sirve de nada.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}

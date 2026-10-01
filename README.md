@@ -11,7 +11,7 @@ about background work (**a bounded pool, not loose goroutines**).
 
 ---
 
-## What's in the box — `v0.2.0`
+## What's in the box — `v0.3.0`
 
 ### The core (no HTTP dependency at all)
 
@@ -35,6 +35,32 @@ about background work (**a bounded pool, not loose goroutines**).
 | `middleware` | Signed-cookie session (no session table), CSRF double-submit that also reads the header htmx sends, request id, panic recovery with stack, and request logging. |
 | `testsupport` | Test database bootstrap that **cannot silently skip**: with `REQUIRE_DB=1` a missing database is a failure, not a skip. |
 | assets | A neutral starter design system and htmx 2.0.4 **vendored** (embedded in the binary): no CDN, works offline, no third party deciding what your app runs. |
+
+### Start a new project
+
+```bash
+go run github.com/enrand22/canguro-rails/cmd/canguro@latest new rndc_go \
+  --module github.com/enrand22/rndc_go --title "RNDC"
+```
+
+You get a project that already follows the house conventions: `routes` as the single place where
+routes are declared, controllers that stay thin, services that hold the rules, models as the only
+layer that talks SQL, an `/healthz` that queries the database (a health check that answers 200
+with the database down is worse than none), CSRF on anything that changes state, a `Makefile`, a
+Dockerfile, a Kamal deploy file and a CI workflow.
+
+The skeleton is a directory of templates the CLI embeds, with two rules:
+
+- **`[[.Placeholder]]`, not `{{.Placeholder}}`.** Generated files are Go code, and Go is full of
+  `{{ }}` composite literals (`[]Item{{ID: 1}}`). With the default delimiters every template would
+  have to escape them; with these, nobody thinks about it again.
+- **Only `*.tmpl` files are rendered**; anything else is copied byte for byte, and the `.tmpl`
+  suffix is dropped. Paths are templated too, which is how `cmd/[[.App]]/main.go` becomes
+  `cmd/rndc_go/main.go`.
+
+A test generates a project, compiles it and runs its tests (`CANGURO_KIT_PATH` points it at this
+checkout; CI sets it, so the skeleton is verified on every push instead of on the day it is first
+used).
 
 > The split is deliberate: the core has no HTTP dependency at all, so a daemon can
 > use it without dragging Echo, templ and htmx into its binary. There is a test

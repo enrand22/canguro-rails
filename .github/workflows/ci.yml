@@ -27,6 +27,9 @@ jobs:
       TEST_DATABASE_URL: canguro:canguro@tcp(127.0.0.1:3306)/canguro_test?parseTime=true&charset=utf8mb4&loc=UTC
       # In CI the database MUST be there: a skip would hide a broken service.
       REQUIRE_DB: "1"
+      # Makes the CLI test generate, compile and test a project from the template:
+      # the skeleton is verified on every push instead of on the day it is first used.
+      CANGURO_KIT_PATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +56,9 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+      - name: Template files are tracked (a git-ignored template never ships)
+        run: make templates-tracked
 
       - name: Tests (against a real MySQL)
         run: go test ./... -count=1 -p 1

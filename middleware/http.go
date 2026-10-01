@@ -10,32 +10,28 @@ import (
 )
 
 const requestIDHeader = "X-Request-ID"
+const requestIDKey = "canguro.request_id"
 
 // RequestID ensures every request has an id, so a log line in one service can be
-// matched with the same request in another. It is read from the incoming header
-// when a proxy already set one, and generated otherwise.
-func (m requestIDMiddleware) apply(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id := c.Request().Header.Get(requestIDHeader)
-		if id == "" {
-			if token, err := RandomToken(); err == nil {
-				id = token[:16]
-			} else {
-				id = "unknown"
+// matched with the same request in another. It reads the id from the incoming
+// header when a proxy already set one, and generates it otherwise.
+func RequestID() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			id := c.Request().Header.Get(requestIDHeader)
+			if id == "" {
+				if token, err := RandomToken(); err == nil {
+					id = token[:16]
+				} else {
+					id = "unknown"
+				}
 			}
+			c.Response().Header().Set(requestIDHeader, id)
+			c.Set(requestIDKey, id)
+			return next(c)
 		}
-		c.Response().Header().Set(requestIDHeader, id)
-		c.Set(requestIDKey, id)
-		return next(c)
 	}
 }
-
-type requestIDMiddleware struct{}
-
-// RequestID is the middleware instance (a value, so it can be used inline).
-var RequestID = requestIDMiddleware{}
-
-const requestIDKey = "canguro.request_id"
 
 // RequestIDFrom returns the request id, if any.
 func RequestIDFrom(c echo.Context) string {

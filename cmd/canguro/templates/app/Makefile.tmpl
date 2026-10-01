@@ -1,0 +1,116 @@
+# ── [[.Title]] · Makefile ─────────────────────────────────────────────────────
+# Everything done often lives here, so nobody memorises commands
+# (the same idea as `rails db:migrate` or `bin/rails test`).
+#
+# Tools are installed with `make setup`.
+
+SHELL := /bin/bash
+BIN := bin/[[.App]]
+PKG := ./...
+GOBIN := $(shell go env GOPATH)/bin
+COVER_MIN ?= 80
+
+# Test database. REQUIRE_DB=1 is what makes `make test` mean something: without it
+# the database tests skip silently and a green run proves nothing.
+TEST_DATABASE_URL ?= [[.App]]:[[.App]]@tcp(127.0.0.1:3307)/[[.App]]_test?parseTime=true&charset=utf8mb4&loc=UTC
+REQUIRE_DB ?= 1
+export TEST_DATABASE_URL
+export REQUIRE_DB
+
+.PHONY: help setup templ build run test race cover lint fmt vuln migrate migrate-status migrate-create migrate-down schema db-up db-down clean scrub
+
+help: ## Show this help
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Install the development tools (templ, goose, golangci-lint)
+	go install github.com/a-h/templ/cmd/templ@latest
+	go install github.com/pressly/goose/v3/cmd/goose@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "done: $(GOBIN)"
+
+templ: ## Regenerate templ views (run after touching any .templ)
+	$(GOBIN)/templ generate
+
+build: templ ## Compile the binary
+	go build -o $(BIN) ./cmd/[[.App]]
+
+run: templ ## Run the server in the foreground
+	go run ./cmd/[[.App]]
+
+test: templ ## Run the suite (uses the test database; missing database = failure)
+	# -p 1 on purpose: packages share the test database, so in parallel they step
+	# on each other (one cleans up while another is inserting).
+	go test $(PKG) -count=1 -p 1
+
+race: templ ## Run the suite with the race detector
+	go test $(PKG) -count=1 -p 1 -race
+
+cover: templ ## Coverage report; fails below $(COVER_MIN)%
+	go test $(PKG) -count=1 -p 1 -coverpkg=./internal/... -coverprofile=coverage.out -covermode=atomic
+	@# Only what a human wrote: templ's generated code is not ours to test.
+	@grep -vE '_templ\.go' coverage.out > coverage.filtered.out
+	@go tool cover -func=coverage.filtered.out | tail -1
+	@go tool cover -html=coverage.filtered.out -o coverage.html
+	@pct=$$(go tool cover -func=coverage.filtered.out | tail -1 | awk '{print $$3}' | tr -d '%'); \
+	 echo "coverage: $$pct%  ·  minimum: $(COVER_MIN)%"; \
+	 awk -v p="$$pct" -v m="$(COVER_MIN)" 'BEGIN { exit (p+0 < m+0) }' || \
+	 (echo "BELOW THE THRESHOLD: add tests or justify the change in the PR"; exit 1)
+
+lint: ## go vet + golangci-lint (when installed) + gofmt check
+	go vet $(PKG)
+	@command -v $(GOBIN)/golangci-lint >/dev/null && $(GOBIN)/golangci-lint run ./... || echo "(golangci-lint not installed: run make setup)"
+	@test -z "$$(gofmt -l . | grep -v '_templ.go' || true)" || (echo "unformatted files:"; gofmt -l . | grep -v '_templ.go'; exit 1)
+
+fmt: ## Format the code (generated files untouched)
+	gofmt -w $$(find . -name '*.go' -not -name '*_templ.go')
+
+vuln: ## Dependency vulnerability audit
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+# ── Database ─────────────────────────────────────────────────────────────────
+# Migrations never run when the app starts (a broken migration would take the
+# service down and the health check would lie). They run here, explicitly.
+
+DATABASE_URL ?= $(shell grep -h '^DATABASE_URL=' .env 2>/dev/null | cut -d= -f2-)
+
+migrate: ## Apply pending migrations
+	$(GOBIN)/goose -dir migrations mysql "$(DATABASE_URL)" up
+
+migrate-status: ## Show migration status
+	$(GOBIN)/goose -dir migrations mysql "$(DATABASE_URL)" status
+
+migrate-down: ## Roll back the last migration
+	$(GOBIN)/goose -dir migrations mysql "$(DATABASE_URL)" down
+
+migrate-create: ## Create a migration (like `rails g migration`): make migrate-create NAME=add_banks
+	@test -n "$(NAME)" || (echo "missing NAME=<short_snake_case_description>"; exit 1)
+	$(GOBIN)/goose -dir migrations create $(NAME) sql
+	@ls -1t migrations/*.sql | head -1 | sed 's/^/  created: /'
+
+schema: ## Dump the schema to db/schema.sql (like `rails db:schema:dump`)
+	@mkdir -p db
+	@docker exec $(DB_CONTAINER) mysqldump -uroot -proot --no-data --skip-comments --skip-add-drop-table $(shell echo "$(DATABASE_URL)" | sed 's#.*/##' | cut -d'?' -f1) \
+	  | grep -vE '^/\*!|^--' > db/schema.sql
+	@echo "schema dumped to db/schema.sql"
+
+DB_CONTAINER ?= [[.App]]-mysql-test
+
+db-up: ## Start the test MySQL (port 3307)
+	@docker start $(DB_CONTAINER) 2>/dev/null || \
+	 docker run -d --name $(DB_CONTAINER) -p 3307:3306 \
+	   -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=[[.App]]_test \
+	   -e MYSQL_USER=[[.App]] -e MYSQL_PASSWORD=[[.App]] mysql:8.0
+	@for i in {1..30}; do docker exec $(DB_CONTAINER) mysqladmin ping -h127.0.0.1 -uroot -proot --silent >/dev/null 2>&1 && break; sleep 2; done
+	@echo "test database up on 3307"
+
+db-down: ## Stop the test MySQL (without deleting it)
+	-docker stop $(DB_CONTAINER)
+
+scrub: ## Refuse to publish client data (also runs in CI)
+	@# The patterns use a character class (sol[u]gg) so this rule cannot match itself.
+	@! grep -rniE "sol[u]gg|segt[r]onic|kangar[o]om|be[j]a|kreaso[f]t|madei[s]a|20[0-9]\.126\.|84\.247\.|157\.173\." . \
+	  --exclude-dir=.git || (echo "client traces found"; exit 1)
+	@echo "scrub clean"
+
+clean: ## Remove local artifacts
+	rm -rf bin dist coverage.out coverage.filtered.out coverage.html

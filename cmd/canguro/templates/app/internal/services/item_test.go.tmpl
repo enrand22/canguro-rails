@@ -1,0 +1,87 @@
+package services
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"[[.Module]]/internal/models"
+)
+
+// fakeStore is a double: it records what the service asked for and lets the test
+// decide what to answer. No database, no HTTP.
+type fakeStore struct {
+	created []string
+	items   []models.Item
+	err     error
+}
+
+func (f *fakeStore) CreateItem(_ context.Context, name string) (models.Item, error) {
+	if f.err != nil {
+		return models.Item{}, f.err
+	}
+	f.created = append(f.created, name)
+	return models.Item{ID: int64(len(f.created)), Name: name}, nil
+}
+
+func (f *fakeStore) ListItems(_ context.Context, limit int) ([]models.Item, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.items, nil
+}
+
+func TestCreateTrimsTheName(t *testing.T) {
+	store := &fakeStore{}
+	svc := NewItem(store)
+
+	item, err := svc.Create(context.Background(), "  teclado  ")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if item.Name != "teclado" {
+		t.Errorf("name = %q, want it trimmed", item.Name)
+	}
+	if len(store.created) != 1 || store.created[0] != "teclado" {
+		t.Errorf("the store received %v, want the trimmed name", store.created)
+	}
+}
+
+func TestCreateRejectsAnEmptyName(t *testing.T) {
+	svc := NewItem(&fakeStore{})
+	for _, name := range []string{"", "   ", "\t\n"} {
+		if _, err := svc.Create(context.Background(), name); !errors.Is(err, ErrNameRequired) {
+			t.Errorf("Create(%q) error = %v, want ErrNameRequired", name, err)
+		}
+	}
+}
+
+func TestCreateRejectsAnOverlyLongName(t *testing.T) {
+	svc := NewItem(&fakeStore{})
+	long := strings.Repeat("a", 121)
+	if _, err := svc.Create(context.Background(), long); err == nil {
+		t.Error("a name longer than the column should be rejected before hitting the database")
+	}
+}
+
+func TestCreateSurfacesStoreErrors(t *testing.T) {
+	boom := errors.New("db on fire")
+	svc := NewItem(&fakeStore{err: boom})
+	if _, err := svc.Create(context.Background(), "algo"); !errors.Is(err, boom) {
+		t.Errorf("error = %v, want it to wrap the store error", err)
+	}
+}
+
+func TestListPassesThrough(t *testing.T) {
+	store := &fakeStore{items: []models.Item{{ID: 1, Name: "uno"}}}
+	svc := NewItem(store)
+
+	items, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(items) != 1 || items[0].Name != "uno" {
+		t.Errorf("List returned %v", items)
+	}
+}

@@ -1,0 +1,15 @@
+.git
+.gitignore
+bin/
+dist/
+coverage.out
+coverage.filtered.out
+coverage.html
+log/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/

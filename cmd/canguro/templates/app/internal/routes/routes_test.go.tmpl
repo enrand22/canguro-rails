@@ -1,0 +1,105 @@
+package routes
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"[[.Module]]/internal/config"
+
+	"github.com/labstack/echo/v4"
+
+	"github.com/enrand22/canguro-rails/testsupport"
+)
+
+// testApp builds the real server against the test database. The database policy
+// (skip, or fail when REQUIRE_DB=1) is the toolkit's: a green run has to mean the
+// server was actually wired.
+func testApp(t *testing.T) *echo.Echo {
+	t.Helper()
+	db := testsupport.DB(t)
+	testsupport.HasTable(t, db, "items")
+
+	cfg := &config.Config{
+		Env:           "test",
+		Port:          "0",
+		DatabaseURL:   "unused-in-this-test",
+		SessionSecret: strings.Repeat("s", 40),
+		LogLevel:      "error",
+		WorkerCount:   1,
+	}
+	return New(Deps{Config: cfg, DB: db, Logger: testsupport.Logger()})
+}
+
+func TestHealthzQueriesTheDatabase(t *testing.T) {
+	app := testApp(t)
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/healthz = %d, want 200 (it queries the database on purpose)", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "ok") {
+		t.Errorf("body = %s", rec.Body.String())
+	}
+}
+
+func TestHealthzDoesNotRequireASession(t *testing.T) {
+	// The proxy calls it. If it needed a session, every deploy would fail.
+	app := testApp(t)
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+		t.Errorf("/healthz must be public, got %d", rec.Code)
+	}
+}
+
+func TestHomeRendersTheFullPage(t *testing.T) {
+	app := testApp(t)
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/ = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	// templ renders `<!doctype html>` in lowercase: compare case-insensitively or
+	// this test fails for a reason that has nothing to do with the app.
+	if !strings.Contains(strings.ToLower(body), "<!doctype html>") {
+		t.Errorf("a plain request must get the full page, got: %.120s", body)
+	}
+}
+
+func TestHomeAnswersAnHTMXRequestWithTheFragmentOnly(t *testing.T) {
+	app := testApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("htmx request = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(strings.ToLower(body), "<!doctype html>") {
+		t.Errorf("an htmx request must NOT get the shell, got: %.120s", body)
+	}
+	if !strings.Contains(body, `id="items"`) {
+		t.Errorf("the fragment is missing: %.200s", body)
+	}
+}
+
+func TestPostWithoutCSRFTokenIsRejected(t *testing.T) {
+	app := testApp(t)
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/items", nil))
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("POST without a CSRF token = %d, want 403", rec.Code)
+	}
+}

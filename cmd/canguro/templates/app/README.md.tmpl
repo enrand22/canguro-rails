@@ -1,0 +1,48 @@
+# [[.Title]] — built with canguro-rails
+
+> Convention over configuration, so the code goes where you expect it.
+> The house rules are in the toolkit:
+> **https://github.com/enrand22/canguro-rails/blob/main/CONVENTIONS.md**
+
+## Quickstart
+
+```bash
+make setup                  # templ, goose, golangci-lint
+cp .env.example .env        # then edit DATABASE_URL and SESSION_SECRET
+make db-up                  # MySQL for tests (port 3307)
+make migrate                # apply migrations
+make test                   # the suite (against the test database)
+make run                    # http://localhost:8080
+```
+
+## Layout
+
+```
+cmd/[[.App]]/            the binary: config → database → jobs → routes → server
+internal/config/         declares this app's variables (validated at boot)
+internal/models/         the ONLY layer that talks SQL
+internal/services/       business rules (tested without HTTP)
+internal/controllers/    thin HTTP layer
+internal/views/          templ templates
+internal/routes/         every route, in one file
+internal/health/         the health check that actually checks the database
+migrations/              numbered, immutable once applied
+web/static/              CSS and JS (the toolkit's assets are used by default)
+```
+
+## What the toolkit gives this project
+
+- **htmx + templ**: `web.Render` answers an htmx request with the fragment and
+  everyone else with the full page — one handler, not two.
+- **Validation without JavaScript**: `RenderInvalid` returns 422 with the form
+  re-rendered.
+- **Bounded background work**: `jobs` (never a bare `go func()`).
+- **Migrations that never run behind your back**: `make migrate`, explicitly.
+- **Tests that cannot lie**: a missing database is a failure when `REQUIRE_DB=1`
+  (what `make test` sets), and a skip only when nobody asked for it.
+
+## Deploy
+
+`config/deploy.yml` has the Kamal skeleton. Fill in the server, the domain and the
+image, then `kamal setup` / `kamal deploy`. The health check points at `/healthz`,
+which queries the database on purpose: a 200 that lies is worse than a 500.

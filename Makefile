@@ -15,7 +15,13 @@ REQUIRE_DB ?= 1
 export TEST_DATABASE_URL
 export REQUIRE_DB
 
-.PHONY: help setup build test cover lint fmt vuln db-up db-down clean scrub
+# Makes the CLI test compile a scaffolded project against THIS checkout (it builds,
+# runs templ and runs the new project's tests). Without it that test skips, and the
+# template could rot unnoticed until the next app is created from it.
+CANGURO_KIT_PATH ?= $(shell pwd)
+export CANGURO_KIT_PATH
+
+.PHONY: help setup build test cover lint fmt vuln db-up db-down clean scrub templates-tracked
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -50,6 +56,17 @@ lint: ## go vet + golangci-lint (when installed) + gofmt check
 	go vet $(PKG)
 	@command -v $(GOBIN)/golangci-lint >/dev/null && $(GOBIN)/golangci-lint run ./... || echo "(golangci-lint not installed: run make setup)"
 	@test -z "$$(gofmt -l . | grep -v '_templ.go' || true)" || (echo "unformatted files:"; gofmt -l . | grep -v '_templ.go'; exit 1)
+	@$(MAKE) --no-print-directory templates-tracked
+
+templates-tracked: ## Every template file must be committable (git-ignored templates never ship)
+	@# A template ignored by a .gitignore inside the template tree is a file that
+	@# exists on the machine that wrote it and nowhere else: the CLI would not
+	@# embed it, CI would not see it, and generated projects would quietly miss it.
+	@for f in $$(find cmd/canguro/templates -type f | sort); do \
+	  git ls-files --error-unmatch "$$f" >/dev/null 2>&1 || { \
+	    echo "::error::template file not tracked by git (check .gitignore): $$f"; exit 1; }; \
+	done
+	@echo "all template files are tracked"
 
 fmt: ## Format the code (generated files untouched)
 	gofmt -w $$(find . -name '*.go' -not -name '*_templ.go')

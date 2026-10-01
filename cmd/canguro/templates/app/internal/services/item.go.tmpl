@@ -1,0 +1,55 @@
+// Package services holds the business rules.
+//
+// A service takes models, applies rules and returns results/errors. It knows
+// nothing about HTTP, which is what makes it testable without a server — and it
+// depends on an INTERFACE, which is what makes it testable without a database.
+package services
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"[[.Module]]/internal/models"
+)
+
+// ErrNameRequired: la regla de negocio más simple de todas.
+var ErrNameRequired = errors.New("the name is required")
+
+// maxNameLength is the business limit, and it matches the column width on purpose.
+const maxNameLength = 120
+
+// ItemStore is the slice of the data layer this service needs. Depending on an
+// interface instead of on models.Store is the D of SOLID, and it is why the tests
+// below run without a database.
+type ItemStore interface {
+	CreateItem(ctx context.Context, name string) (models.Item, error)
+	ListItems(ctx context.Context, limit int) ([]models.Item, error)
+}
+
+// Item applies the rules of the example entity.
+type Item struct {
+	store ItemStore
+}
+
+// NewItem wires the service with its store.
+func NewItem(store ItemStore) *Item { return &Item{store: store} }
+
+// Create validates and then persists. The validation lives here and not in the
+// controller: a controller that validates is a controller with business rules.
+func (s *Item) Create(ctx context.Context, name string) (models.Item, error) {
+	clean := strings.TrimSpace(name)
+	switch {
+	case clean == "":
+		return models.Item{}, ErrNameRequired
+	case len([]rune(clean)) > maxNameLength:
+		return models.Item{}, fmt.Errorf("the name cannot exceed %d characters", maxNameLength)
+	}
+	return s.store.CreateItem(ctx, clean)
+}
+
+// List returns the most recent items.
+func (s *Item) List(ctx context.Context) ([]models.Item, error) {
+	return s.store.ListItems(ctx, 50)
+}

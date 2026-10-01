@@ -1,0 +1,76 @@
+package controllers
+
+import (
+	"net/http"
+
+	"github.com/labstack/echo/v4"
+
+	"[[.Module]]/internal/services"
+	"[[.Module]]/internal/views"
+
+	"github.com/enrand22/canguro-rails/web"
+)
+
+// Home serves the example screen (list + create form).
+type Home struct {
+	*Base
+	Items *services.Item
+}
+
+// Index lists the items.
+//
+// The SAME handler answers a normal navigation and an htmx request: `Render`
+// decides (full page vs fragment) by looking at the HX-Request header. Duplicating
+// the handler per client type is the thing this toolkit exists to avoid.
+func (h *Home) Index(c echo.Context) error {
+	items, err := h.Items.List(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return h.Renderer.Render(c, http.StatusOK, web.View{
+		Title:   views.PageTitle(),
+		Page:    views.HomeBody(views.HomeProps{Items: items, Flash: h.Flash(c)}),
+		Partial: views.ItemsList(items),
+	})
+}
+
+// createForm is what the form sends.
+type createForm struct {
+	Name string `form:"name"`
+}
+
+// Create handles the form.
+//
+// Two answers, both ours to choose:
+//   - validation error → 422 with the form re-rendered (the user sees the error in
+//     place, and no JavaScript validated anything);
+//   - success → a redirect (or an htmx-aware redirect when the request came from htmx).
+func (h *Home) Create(c echo.Context) error {
+	var form createForm
+	// Bind errors (a malformed body) are the client's fault, not a validation rule.
+	if err := c.Bind(&form); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid form")
+	}
+
+	ctx := c.Request().Context()
+	if _, err := h.Items.Create(ctx, form.Name); err != nil {
+		// The rule failed: give the form back with the message on the field.
+		items, listErr := h.Items.List(ctx)
+		if listErr != nil {
+			return listErr
+		}
+		return h.Renderer.RenderInvalid(c, web.View{
+			Title: views.PageTitle(),
+			Page: views.HomeBody(views.HomeProps{
+				Items: items,
+				Form:  views.HomeForm{Name: form.Name, Error: err.Error()},
+			}),
+			Partial: views.ItemsList(items),
+		})
+	}
+
+	if err := h.SetFlash(c, "Guardado"); err != nil {
+		return err
+	}
+	return h.Renderer.Redirect(c, "/")
+}

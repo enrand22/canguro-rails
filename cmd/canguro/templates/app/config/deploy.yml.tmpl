@@ -1,0 +1,56 @@
+# Kamal deploy skeleton — fill in the blanks and DELETE this comment.
+#
+# Nothing here is real on purpose: server IPs, domains and secrets belong to the
+# project, not to the template. If this file ever ships with a real IP in it, the
+# toolkit failed at its job.
+
+service: [[.App]]
+
+image: your-registry-user/[[.App]]
+
+servers:
+  web:
+    - <SERVER_IP>
+
+proxy:
+  ssl: false # ← true once the domain resolves to the server
+  host: <DOMAIN>
+  app_port: 8080
+  healthcheck:
+    # /healthz queries the DATABASE on purpose: a 200 that lies is worse than a 500.
+    path: /healthz
+    interval: 5
+    timeout: 10
+
+registry:
+  server: <REGISTRY_HOST>
+  username: <REGISTRY_USER>
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+
+env:
+  secret:
+    - DATABASE_URL
+    - SESSION_SECRET
+  clear:
+    ENV: production
+    PORT: "8080"
+    LOG_LEVEL: info
+
+# The database as an accessory (no published port: the app talks over the Docker
+# network, and an exposed 3306 is how a database ends up on someone's scan).
+accessories:
+  db:
+    image: mysql:8.0
+    host: <SERVER_IP>
+    port: "127.0.0.1:3306:3306"
+    env:
+      clear:
+        MYSQL_DATABASE: [[.App]]_production
+      secret:
+        - MYSQL_ROOT_PASSWORD
+    directories:
+      - data:/var/lib/mysql

@@ -225,7 +225,7 @@ func TestCSRFRejectsAWrongToken(t *testing.T) {
 
 func TestRequestIDIsGeneratedAndPropagated(t *testing.T) {
 	e := echo.New()
-	e.Use(RequestID.apply)
+	e.Use(RequestID())
 	e.GET("/", func(c echo.Context) error {
 		if RequestIDFrom(c) == "" {
 			t.Error("the request id should be available in the context")

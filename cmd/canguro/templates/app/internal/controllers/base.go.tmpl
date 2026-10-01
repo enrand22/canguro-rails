@@ -1,0 +1,37 @@
+// Package controllers is the HTTP layer.
+//
+// Convention: a controller is THIN. It reads the request, calls a service and
+// picks the view. If a business `if` shows up here, it belongs in services.
+package controllers
+
+import (
+	"github.com/labstack/echo/v4"
+
+	"github.com/enrand22/canguro-rails/web"
+)
+
+// Session is what a controller needs from the session: the kit's session
+// implements it, and a test can pass a double instead of a real cookie.
+type Session interface {
+	TakeFlash(c echo.Context) string
+	SetFlash(c echo.Context, message string) error
+}
+
+// Base is what every controller embeds: the session and the renderer.
+type Base struct {
+	Sessions Session
+	Renderer *web.Renderer
+}
+
+// NewBase builds the shared base.
+func NewBase(sessions Session, renderer *web.Renderer) *Base {
+	return &Base{Sessions: sessions, Renderer: renderer}
+}
+
+// Flash returns the one-shot message (and consumes it).
+func (b *Base) Flash(c echo.Context) string { return b.Sessions.TakeFlash(c) }
+
+// SetFlash stores a message for the next render.
+func (b *Base) SetFlash(c echo.Context, message string) error {
+	return b.Sessions.SetFlash(c, message)
+}

@@ -1,0 +1,54 @@
+package views
+
+import (
+	"[[.Module]]/internal/models"
+
+	"github.com/enrand22/canguro-rails/web/components"
+)
+
+// HomeProps is what the home page needs.
+type HomeProps struct {
+	Items []models.Item
+	Form  HomeForm
+	Flash string
+}
+
+// HomeForm carries what the user typed when the form comes back with an error:
+// nobody should have to retype a field because of a validation message.
+type HomeForm struct {
+	Name  string
+	Error string
+}
+
+// HomeBody is the page CONTENT: the shell is added by the renderer. The same
+// handler returns ItemsList when the request comes from htmx.
+templ HomeBody(props HomeProps) {
+	@components.Flash("ok", props.Flash)
+
+	<section class="card">
+		<h2>Agregar</h2>
+		<form hx-post="/items" hx-target="#items" hx-swap="outerHTML" method="post">
+			@components.Field(components.FieldProps{
+				Name:     "name",
+				Label:    "Nombre",
+				Value:    props.Form.Name,
+				Error:    props.Form.Error,
+				Required: true,
+			})
+			<button class="btn" type="submit">Guardar</button>
+		</form>
+	</section>
+
+	<section class="card">
+		<h2>Items</h2>
+		@ItemsList(props.Items)
+	</section>
+}
+
+// ItemsList is the fragment an htmx request gets: the same markup, without the
+// shell. One function, two responses.
+templ ItemsList(items []models.Item) {
+	<div id="items">
+		@itemsTable(items)
+	</div>
+}

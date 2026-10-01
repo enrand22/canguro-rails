@@ -1,0 +1,43 @@
+// Package health answers the question the deploy actually needs answered: "is this
+// instance able to serve requests?", and answers it against the database.
+//
+// A health check that returns 200 while the database is gone is worse than no
+// health check at all: the proxy keeps the broken instance in rotation and the
+// deploy reports success.
+package health
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v4"
+)
+
+// Pinger is what the check needs (an interface: the store implements it).
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// Checker answers /healthz.
+type Checker struct {
+	db      Pinger
+	timeout time.Duration
+}
+
+// New builds the checker. The timeout is short on purpose: a health check that
+// hangs is a health check that fails, only slower.
+func New(db Pinger) *Checker {
+	return &Checker{db: db, timeout: 2 * time.Second}
+}
+
+// Check is the handler. 503 when the database does not answer.
+func (c *Checker) Check(ctx echo.Context) error {
+	pingCtx, cancel := context.WithTimeout(ctx.Request().Context(), c.timeout)
+	defer cancel()
+
+	if err := c.db.Ping(pingCtx); err != nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database unreachable")
+	}
+	return ctx.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}

@@ -1,0 +1,74 @@
+package views
+
+import (
+	"strconv"
+
+	"[[.Module]]/internal/models"
+
+	"github.com/enrand22/canguro-rails/web/components"
+)
+
+// LayoutProps is what the shell needs to paint itself.
+type LayoutProps struct {
+	Title string
+}
+
+// PageTitle is the tab title, written once.
+func PageTitle() string { return "[[.Title]]" }
+
+// Layout is the shell every page renders inside. It is the ONLY place that knows
+// about <head>, the CSS and the htmx script: pages provide CONTENT, not documents.
+//
+// The renderer (routes) bridges to it: templ generates Layout(props, content)
+// while the toolkit calls layout(title, content).
+templ Layout(props LayoutProps, content templ.Component) {
+	<!DOCTYPE html>
+	<html lang="es">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ props.Title }</title>
+			<!-- Served by the binary: the toolkit's assets are embedded there. No CDN,
+			     works offline, and nothing third-party decides what runs here. -->
+			<link rel="stylesheet" href="/css/design-system.css"/>
+			<script src="/js/htmx.min.js" defer></script>
+		</head>
+		<body>
+			<header class="topbar">
+				<span class="brand">{ props.Title }</span>
+			</header>
+			<main class="wrap">
+				@content
+			</main>
+		</body>
+	</html>
+}
+
+// itemsTable is the markup of the list, shared by the full page and the fragment.
+// Keeping it in one function is why the two responses cannot drift apart.
+templ itemsTable(items []models.Item) {
+	if len(items) == 0 {
+		@components.EmptyState("Todavía no hay nada cargado.")
+	} else {
+		<div class="table-wrap">
+			<table class="data">
+				<thead>
+					<tr>
+						<th>ID</th>
+						<th>Nombre</th>
+						<th>Creado</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, item := range items {
+						<tr>
+							<td>{ strconv.FormatInt(item.ID, 10) }</td>
+							<td>{ item.Name }</td>
+							<td>{ item.CreatedAt.Format("2006-01-02 15:04") }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}

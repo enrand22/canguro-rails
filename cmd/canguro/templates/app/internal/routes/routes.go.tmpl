@@ -1,0 +1,106 @@
+// Package routes is the ONLY place where routes are declared.
+//
+// Es nuestro `routes.rb`: si una ruta se registra en otro lado (un controlador, un
+// `init()`), el mapa de la aplicación deja de existir.
+package routes
+
+import (
+	"errors"
+	"log/slog"
+	"net/http"
+
+	"github.com/a-h/templ"
+	"github.com/jmoiron/sqlx"
+	"github.com/labstack/echo/v4"
+
+	"[[.Module]]/internal/config"
+	"[[.Module]]/internal/controllers"
+	"[[.Module]]/internal/health"
+	"[[.Module]]/internal/models"
+	"[[.Module]]/internal/services"
+	"[[.Module]]/internal/views"
+
+	kitmw "github.com/enrand22/canguro-rails/middleware"
+	"github.com/enrand22/canguro-rails/web"
+)
+
+// Deps is what the router needs to wire everything.
+type Deps struct {
+	Config *config.Config
+	DB     *sqlx.DB
+	Logger *slog.Logger
+}
+
+// New builds the server: infraestructura, middleware y rutas.
+func New(d Deps) *echo.Echo {
+	logger := d.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	// ── Infraestructura ──────────────────────────────────────────────────────
+	store := models.NewStore(d.DB)
+	items := services.NewItem(store)
+	sessions := &kitmw.Session{
+		Secret: []byte(d.Config.SessionSecret),
+		Secure: d.Config.IsProd(),
+		// The cookie name is per app: it keeps two services on one domain from
+		// fighting over the same cookie, and it makes sessions recognisable in a
+		// browser's devtools.
+		CookieName: "[[.App]]_session",
+	}
+	// El renderer decide fragmento vs página completa. El cascarón vive acá: las
+	// páginas son contenido, no HTML completo (por eso el adaptador: templ genera
+	// Layout(props, content) y el toolkit espera layout(title, content)).
+	renderer := web.NewRenderer(func(title string, page templ.Component) templ.Component {
+		return views.Layout(views.LayoutProps{Title: title}, page)
+	}, logger)
+	base := controllers.NewBase(sessions, renderer)
+	home := &controllers.Home{Base: base, Items: items}
+	healthCtl := health.New(store)
+
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+	e.HTTPErrorHandler = httpErrorHandler(logger)
+
+	// ── Middleware global (el orden importa) ─────────────────────────────────
+	e.Use(kitmw.RequestID())              // id por request, para correlacionar logs
+	e.Use(kitmw.Recover(logger))          // un panic no tumba el servidor
+	e.Use(kitmw.RequestLogger(logger))    // una línea por request, con duración
+	e.Use(sessions.Load())                // sesión firmada (y token CSRF)
+
+	// ── Estáticos ───────────────────────────────────────────────────────────
+	// Los sirve el toolkit (vienen embebidos en su binario): este proyecto no
+	// copia CSS ni JS, y cuando el kit los mejora los hereda.
+	web.RegisterStatic(e, "")
+
+	// ── Rutas ───────────────────────────────────────────────────────────────
+	e.GET("/healthz", healthCtl.Check) // sin sesión: lo consulta el proxy
+
+	// Públicas
+	e.GET("/", home.Index)
+
+	// Protegidas: todo lo que cambia estado pasa por CSRF.
+	protected := e.Group("", kitmw.NewCSRF().Protect())
+	protected.POST("/items", home.Create)
+
+	return e
+}
+
+// httpErrorHandler logs the failures and answers with the right status.
+func httpErrorHandler(logger *slog.Logger) echo.HTTPErrorHandler {
+	return func(err error, c echo.Context) {
+		code := http.StatusInternalServerError
+		var he *echo.HTTPError
+		if errors.As(err, &he) {
+			code = he.Code
+		}
+		if code >= 500 {
+			logger.Error("request failed", "error", err, "path", c.Request().URL.Path)
+		}
+		if !c.Response().Committed {
+			_ = c.NoContent(code)
+		}
+	}
+}
