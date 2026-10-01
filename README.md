@@ -11,7 +11,7 @@ about background work (**a bounded pool, not loose goroutines**).
 
 ---
 
-## What's in the box — `v0.3.0`
+## What's in the box — `v0.3.1`
 
 ### The core (no HTTP dependency at all)
 

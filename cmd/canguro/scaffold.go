@@ -13,7 +13,7 @@ import (
 
 // defaultKitVersion is what a scaffolded project requires when the CLI itself has
 // no version (running from a checkout). It is bumped with the toolkit.
-const defaultKitVersion = "v0.3.0"
+const defaultKitVersion = "v0.3.1"
 
 // templates holds the project skeleton. Embedding it keeps the CLI a single file:
 // `go run github.com/enrand22/canguro-rails/cmd/canguro@latest new ...` works

@@ -257,20 +257,16 @@ func TestScaffoldedProjectBuilds(t *testing.T) {
 	}
 }
 
-// run executes a command in dir with the environment the generated project needs
-// to resolve it offline: the toolkit's dependencies are always in the module cache
-// of anyone who can build the toolkit itself, and `-mod=mod` fills in go.mod from
-// there. Without this the test would hang on `go mod tidy` waiting for the network
-// (or for the module cache lock) instead of proving that the template compiles.
+// run executes a command in dir with `-mod=mod`, so go.mod is completed from the
+// module cache instead of requiring a `go mod tidy` step. Nothing else is
+// overridden: GOPROXY and the rest are inherited, because in CI the project may
+// legitimately need to download a module and pinning the proxy off makes the test
+// fail for a reason that has nothing to do with the template.
 func run(t *testing.T, dir, name string, args ...string) error {
 	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	cmd.Env = append(scrubbedEnv(),
-		"GOFLAGS=-mod=mod",
-		"GOPROXY=off",
-		"GOSUMDB=off",
-	)
+	cmd.Env = append(scrubbedEnv(), "GOFLAGS=-mod=mod")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Logf("%s %s:\n%s", name, strings.Join(args, " "), out)
