@@ -25,6 +25,8 @@ jobs:
           --health-retries=20
     env:
       TEST_DATABASE_URL: canguro:canguro@tcp(127.0.0.1:3306)/canguro_test?parseTime=true&charset=utf8mb4&loc=UTC
+      # In CI the database MUST be there: a skip would hide a broken service.
+      REQUIRE_DB: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -58,8 +60,9 @@ jobs:
       - name: Coverage gate (80%)
         run: |
           go test ./... -count=1 -p 1 -coverpkg=./... -coverprofile=coverage.out
-          pct=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
-          echo "cobertura: ${pct}%"
+          grep -vE '_templ\.go' coverage.out > coverage.filtered.out
+          pct=$(go tool cover -func=coverage.filtered.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "coverage (without generated code): ${pct}%"
           awk -v p="$pct" 'BEGIN { exit (p+0 < 80) }' || {
             echo "::error::cobertura por debajo del 80%"; exit 1; }
 

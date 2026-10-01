@@ -11,9 +11,9 @@ about background work (**a bounded pool, not loose goroutines**).
 
 ---
 
-## What's in the box
+## What's in the box — `v0.2.0`
 
-### Available now — `v0.1.0` (the core)
+### The core (no HTTP dependency at all)
 
 | Package | What it gives you |
 |---|---|
@@ -23,13 +23,18 @@ about background work (**a bounded pool, not loose goroutines**).
 | `jobs` | **Bounded** background pool: backpressure instead of unbounded queues, panic isolation, drain-on-shutdown, and `Periodic` tasks that **never overlap themselves**. |
 | `cli` | The daemon surface: `--once`, `--dry-run`, SIGTERM/SIGINT handling and an exit code that tells the truth to systemd. |
 
-### Coming next — `v0.2.0` (the web layer)
+> A daemon can use the core without dragging Echo, templ and htmx into its binary.
+> There is a test enforcing that the promise stays true.
+
+### The web layer
 
 | Package | What it gives you |
 |---|---|
-| `web` | First-class templ + htmx: `Render` detects `HX-Request` and returns **the fragment or the full page from the same handler**, htmx response helpers (redirect, trigger, out-of-band, 422 re-render) and a component set that writes htmx attributes **in one place**. |
-| `middleware` | Session, CSRF, flash, request-id, recovery, request logging. |
-| `testsupport` | Test database bootstrap that **cannot silently skip**: a green suite means the database was actually exercised. |
+| `web` | First-class templ + htmx. `Render` detects `HX-Request` and returns **the fragment or the full page from the same handler**; helpers for the htmx answers that matter (`HXRedirect`, `HXTrigger`, `HXPushURL`, retarget/reswap, out-of-band) and `RenderInvalid`, which returns **422 with the form re-rendered** — server-side validation with zero hand-written JavaScript. |
+| `web/components` | `Flash`, `Field`, `Table`, `EmptyState`, `Pagination`, `ConfirmButton`: the htmx attributes live **in one place** instead of being copied into every template. |
+| `middleware` | Signed-cookie session (no session table), CSRF double-submit that also reads the header htmx sends, request id, panic recovery with stack, and request logging. |
+| `testsupport` | Test database bootstrap that **cannot silently skip**: with `REQUIRE_DB=1` a missing database is a failure, not a skip. |
+| assets | A neutral starter design system and htmx 2.0.4 **vendored** (embedded in the binary): no CDN, works offline, no third party deciding what your app runs. |
 
 > The split is deliberate: the core has no HTTP dependency at all, so a daemon can
 > use it without dragging Echo, templ and htmx into its binary. There is a test
@@ -76,13 +81,16 @@ func main() {
 ## Testing
 
 ```bash
-make db-up      # dev (3306) + test (3307) MySQL containers
+make db-up      # test MySQL container (port 3307)
 make test       # the whole suite against a real database
 make cover      # coverage report, fails below the threshold
 ```
 
-Tests that need a database **skip** when none is available — but `make test` loads the test
-environment for you, so a green run in this repo means the database was exercised.
+Tests that need a database are honest about it. With no database available they skip, so
+`go test ./...` works on any machine. But `make test` and CI set `REQUIRE_DB=1`, which turns a
+missing database into a **failure** instead of a skip — because "everything passed" must never mean
+"nobody ran the database tests". That distinction exists because it happened: a suite reported green
+while 36 database tests were silently skipped.
 
 ## Status
 

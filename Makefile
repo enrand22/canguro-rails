@@ -7,10 +7,13 @@ PKG := ./...
 GOBIN := $(shell go env GOPATH)/bin
 COVER_MIN ?= 80
 
-# Test database. `make db-up` starts it; the tests SKIP without it, which is why
-# `make test` here refuses to pretend: it says out loud how many tests ran.
+# Test database. `make db-up` starts it. REQUIRE_DB=1 is what makes `make test`
+# mean something: without it the database tests skip silently and a green run
+# proves nothing (that is how 36 tests went unnoticed once).
 TEST_DATABASE_URL ?= canguro:canguro@tcp(127.0.0.1:3307)/canguro_test?parseTime=true&charset=utf8mb4&loc=UTC
+REQUIRE_DB ?= 1
 export TEST_DATABASE_URL
+export REQUIRE_DB
 
 .PHONY: help setup build test cover lint fmt vuln db-up db-down clean scrub
 
@@ -34,10 +37,12 @@ race: ## Run the suite with the race detector (jobs and pools live here)
 
 cover: ## Coverage report; fails below $(COVER_MIN)%
 	go test $(PKG) -count=1 -p 1 -coverpkg=./... -coverprofile=coverage.out -covermode=atomic
-	@go tool cover -func=coverage.out | tail -1
-	@go tool cover -html=coverage.out -o coverage.html
-	@pct=$$(go tool cover -func=coverage.out | tail -1 | awk '{print $$3}' | tr -d '%'); \
-	 echo "coverage: $$pct%  ·  minimum: $(COVER_MIN)%"; \
+	@# Count only what a human wrote: templ's generated code is not ours to test.
+	@grep -vE '_templ\.go' coverage.out > coverage.filtered.out
+	@go tool cover -func=coverage.filtered.out | tail -1
+	@go tool cover -html=coverage.filtered.out -o coverage.html
+	@pct=$$(go tool cover -func=coverage.filtered.out | tail -1 | awk '{print $$3}' | tr -d '%'); \
+	 echo "coverage (without generated code): $$pct%  ·  minimum: $(COVER_MIN)%"; \
 	 awk -v p="$$pct" -v m="$(COVER_MIN)" 'BEGIN { exit (p+0 < m+0) }' || \
 	 (echo "BELOW THE THRESHOLD: add tests or justify the change in the PR"; exit 1)
 

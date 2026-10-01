@@ -1,0 +1,109 @@
+/* canguro-rails — starter design system.
+   Neutral on purpose: tokens and primitives, no client branding. Override the
+   variables at the top and the whole thing follows. */
+
+:root {
+  --brand: #15558c;
+  --brand-dark: #0f3f6b;
+  --ink: #16222c;
+  --muted: #64748b;
+  --line: #dfe5ea;
+  --bg: #f2f5f8;
+  --card: #ffffff;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --ok: #067647;
+  --ok-bg: #ecfdf3;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .05);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  padding: 0 0 72px;
+  font-family: "Segoe UI", Roboto, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;              /* 16px keeps iOS from zooming on focus */
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: var(--brand); }
+.muted { color: var(--muted); font-size: 13px; }
+
+/* ---------------------------------------------------------------- chrome */
+.topbar {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: #fff; border-bottom: 1px solid var(--line);
+}
+.topbar .brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; }
+.topbar .spacer { flex: 1; }
+.topbar form { margin: 0; }
+.user-email { color: var(--muted); font-size: 12px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wrap { padding: 14px; display: flex; flex-direction: column; gap: 14px; max-width: 1100px; margin: 0 auto; }
+
+/* ------------------------------------------------------------------ card */
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px; display: flex; flex-direction: column; gap: 12px;
+}
+
+/* ----------------------------------------------------------------- table */
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; background: var(--card); }
+table.data th, table.data td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+table.data th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+table.data tr:last-child td { border-bottom: 0; }
+
+/* ----------------------------------------------------------------- forms */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 13px; color: var(--muted); }
+input, select, textarea {
+  font: inherit; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: #fff; width: 100%;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.field .error { color: var(--danger); font-size: 13px; }
+.has-error input, .has-error select { border-color: var(--danger); }
+
+/* --------------------------------------------------------------- buttons */
+.btn, .btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 14px; border-radius: 10px; font-size: 14px; cursor: pointer;
+  border: 1px solid transparent; background: var(--brand); color: #fff; text-decoration: none;
+}
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+.btn-ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+.link { background: none; border: 0; padding: 0; color: var(--brand); cursor: pointer; font-size: 14px; text-decoration: underline; }
+
+/* --------------------------------------------------------------- alerts */
+.alert { padding: 10px 12px; border-radius: 10px; font-size: 14px; border: 1px solid transparent; }
+.alert-ok { background: var(--ok-bg); color: var(--ok); border-color: #abefc6; }
+.alert-error { background: var(--danger-bg); color: var(--danger); border-color: #fecdca; }
+
+/* ------------------------------------------------------------ htmx bits */
+/* The indicator spins while a request is in flight (hx-indicator). */
+.htmx-indicator { opacity: 0; transition: opacity .2s; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+/* Dim the target while it is being replaced: the user sees it working. */
+.htmx-request .htmx-target-dim { opacity: .55; }
+.empty { color: var(--muted); text-align: center; padding: 22px 8px; }
+
+/* --------------------------------------------------------- pagination */
+.pagination { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.pagination button { min-width: 34px; }
+.pagination .current { font-weight: 700; }
+
+/* ------------------------------------------------------------ utilities */
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; }
+.right { margin-left: auto; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

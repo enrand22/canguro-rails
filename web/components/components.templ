@@ -1,0 +1,168 @@
+// Package components is the shared UI kit: pieces written once so every screen
+// does not reinvent them, and — more importantly — so the htmx attributes live in
+// ONE place instead of being copied into each template.
+package components
+
+import "strconv"
+
+// Flash renders a one-shot message. An empty message renders nothing, so callers
+// can pass the result of TakeFlash() without an if around every usage.
+templ Flash(kind string, message string) {
+	if message != "" {
+		<div class={ "alert", "alert-" + kind } role="status">{ message }</div>
+	}
+}
+
+// FieldProps describes a form field.
+type FieldProps struct {
+	Name     string
+	Label    string
+	Value    string
+	Error    string
+	Type     string // defaults to text
+	Required bool
+	Hint     string
+}
+
+// Field renders label + input + error. The error state is a CSS class, so the
+// markup is the same whether the form is fresh or coming back with errors.
+templ Field(p FieldProps) {
+	<div class={ fieldClass(p.Error) }>
+		if p.Label != "" {
+			<label for={ p.Name }>{ p.Label }</label>
+		}
+		<input
+			id={ p.Name }
+			name={ p.Name }
+			type={ fieldType(p.Type) }
+			value={ p.Value }
+			required?={ p.Required }
+		/>
+		if p.Hint != "" {
+			<span class="muted">{ p.Hint }</span>
+		}
+		if p.Error != "" {
+			<span class="error">{ p.Error }</span>
+		}
+	</div>
+}
+
+// Column is a table header.
+type Column struct {
+	Header string
+	Align  string // "", "right", "center"
+}
+
+// Table renders a table from already-built cells. Cells are components, so a row
+// can contain links, buttons or htmx fragments without this package knowing.
+templ Table(columns []Column, rows [][]templ.Component) {
+	<div class="table-wrap">
+		<table class="data">
+			<thead>
+				<tr>
+					for _, c := range columns {
+						<th style={ alignStyle(c.Align) }>{ c.Header }</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range rows {
+					<tr>
+						for _, cell := range row {
+							<td>@cell</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+// EmptyState is the "there is nothing here" row: always better than a blank area.
+templ EmptyState(message string) {
+	<p class="empty">{ message }</p>
+}
+
+// PaginationProps describes a pager that loads its pages with htmx.
+type PaginationProps struct {
+	Page       int
+	TotalPages int
+	Target     string             // CSS selector that htmx replaces
+	URL        func(int) string   // page number -> URL (keeps query params)
+	Swap       string             // defaults to innerHTML
+}
+
+// Pagination renders numbered buttons that fetch themselves. No full reload, no
+// JavaScript written by hand.
+templ Pagination(p PaginationProps) {
+	if p.TotalPages > 1 {
+		<nav class="pagination" aria-label="pagination">
+			for i := 1; i <= p.TotalPages; i++ {
+				<button
+					class={ buttonClass(i == p.Page) }
+					hx-get={ p.URL(i) }
+					hx-target={ p.Target }
+					hx-swap={ swapStrategy(p.Swap) }
+					hx-push-url="true"
+					aria-current={ currentPage(i == p.Page) }
+				>{ strconv.Itoa(i) }</button>
+			}
+		</nav>
+	}
+}
+
+// ConfirmButton is a destructive action that asks first (hx-confirm) — the
+// cheapest correct UX for "delete this".
+templ ConfirmButton(label string, url string, target string, message string) {
+	<button
+		class="btn-ghost"
+		hx-post={ url }
+		hx-target={ target }
+		hx-swap="outerHTML"
+		hx-confirm={ message }
+	>{ label }</button>
+}
+
+func fieldType(t string) string {
+	if t == "" {
+		return "text"
+	}
+	return t
+}
+
+// fieldClass keeps conditional CSS out of the markup: the templates stay dumb and
+// the two states (ok / error) live in one place.
+func fieldClass(err string) string {
+	if err != "" {
+		return "field has-error"
+	}
+	return "field"
+}
+
+func buttonClass(isCurrent bool) string {
+	if isCurrent {
+		return "btn-ghost current"
+	}
+	return "btn-ghost"
+}
+
+func alignStyle(align string) string {
+	if align == "" {
+		return ""
+	}
+	return "text-align:" + align
+}
+
+func swapStrategy(s string) string {
+	if s == "" {
+		return "innerHTML"
+	}
+	return s
+}
+
+func currentPage(isCurrent bool) string {
+	if isCurrent {
+		return "page"
+	}
+	return ""
+}
