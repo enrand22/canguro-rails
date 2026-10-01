@@ -25,13 +25,20 @@ type Options struct {
 	Once bool
 	// DryRun does everything except the writes.
 	DryRun bool
-	// Version prints the version and exits.
+	// Version says the program was asked for its version. Parse does NOT print it
+	// (it must stay callable from tests): the program prints it and returns, e.g.
+	//
+	//	if opts.Version {
+	//		fmt.Println(version)
+	//		return
+	//	}
 	Version bool
 	// Args holds any remaining positional arguments.
 	Args []string
 }
 
-// Parse reads the standard flags. name and version are used for -h output.
+// Parse reads the standard flags. name is used for -h output; version is printed
+// only if the program asks for it (see Options.Version).
 func Parse(name, version string, args []string) (Options, error) {
 	var o Options
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
@@ -39,14 +46,13 @@ func Parse(name, version string, args []string) (Options, error) {
 	fs.BoolVar(&o.DryRun, "dry-run", false, "read everything, write nothing")
 	fs.BoolVar(&o.Version, "version", false, "print the version and exit")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "%s — usage:\n", name)
+		fmt.Fprintf(fs.Output(), "%s %s — usage:\n", name, version)
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
 	o.Args = fs.Args()
-	_ = version
 	return o, nil
 }
 
