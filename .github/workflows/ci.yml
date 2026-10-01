@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: canguro_test
+          MYSQL_USER: canguro
+          MYSQL_PASSWORD: canguro
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      TEST_DATABASE_URL: canguro:canguro@tcp(127.0.0.1:3306)/canguro_test?parseTime=true&charset=utf8mb4&loc=UTC
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install tools
+        run: go install github.com/a-h/templ/cmd/templ@latest
+
+      - name: Templ files are up to date
+        run: |
+          if ! find . -name '*.templ' -print -quit | grep -q .; then
+            echo "no .templ files in this version yet — nothing to check"
+            exit 0
+          fi
+          templ generate
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::los archivos _templ.go están desactualizados: corré 'make templ' y commiteá"
+            git diff --stat
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Tests (against a real MySQL)
+        run: go test ./... -count=1 -p 1
+
+      - name: Coverage gate (80%)
+        run: |
+          go test ./... -count=1 -p 1 -coverpkg=./... -coverprofile=coverage.out
+          pct=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "cobertura: ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 < 80) }' || {
+            echo "::error::cobertura por debajo del 80%"; exit 1; }
+
+      # Una y otra vez: no se publica un repo abierto con datos de clientes adentro.
+      # Los patrones usan una clase de caracteres (sol[u]gg) para que la regla no se
+      # encuentre a sí misma.
+      - name: No client data
+        run: |
+          if grep -rniE "sol[u]gg|segt[r]onic|kangar[o]om|be[j]a|kreaso[f]t|madei[s]a|20[0-9]\.126\.|84\.247\.|157\.173\." . \
+              --exclude-dir=.git; then
+            echo "::error::aparecieron datos de clientes (nombre, IP o dominio) en un repo público"
+            exit 1
+          fi

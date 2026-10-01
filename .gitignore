@@ -1,0 +1,26 @@
+# Build artifacts
+bin/
+dist/
+*.exe
+
+# Coverage
+coverage.out
+coverage.filtered.out
+coverage.html
+
+# Env / secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Generated templ files are committed (so consumers don't need templ),
+# but the tool's own cache isn't.
+*_templ.txt
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local database dumps
+db/schema.sql.tmp
