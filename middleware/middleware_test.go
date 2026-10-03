@@ -141,6 +141,53 @@ func TestFlashIsOneShot(t *testing.T) {
 	}
 }
 
+// The session payload is JSON and the signature is appended after a dot. If any
+// text in the session contains a dot — a flash like "saved: total 3222.00", a date,
+// an abbreviation — splitting on the FIRST dot cuts the payload in half, the
+// signature no longer matches and the session reads back EMPTY: the user is logged
+// out on the very next click. Found in production (payhub, 2-oct-2026): the record
+// saved fine and the redirect landed on the login page.
+func TestSessionSurvivesAFlashWithADot(t *testing.T) {
+	s := newSession()
+	e := echo.New()
+	e.Use(s.Load())
+	e.POST("/login", func(c echo.Context) error { return s.SetUser(c, 42) })
+	e.POST("/save", func(c echo.Context) error {
+		return s.SetFlash(c, "Registro cargado: 2 transferencia(s) por 3222.00.")
+	})
+
+	var seenUser int64
+	var seenFlash string
+	e.GET("/panel", func(c echo.Context) error {
+		seenUser = UserID(c)
+		seenFlash = s.TakeFlash(c)
+		return c.NoContent(http.StatusOK)
+	})
+
+	login := httptest.NewRecorder()
+	e.ServeHTTP(login, httptest.NewRequest(http.MethodPost, "/login", nil))
+
+	save := httptest.NewRequest(http.MethodPost, "/save", nil)
+	for _, c := range login.Result().Cookies() {
+		save.AddCookie(c)
+	}
+	saved := httptest.NewRecorder()
+	e.ServeHTTP(saved, save)
+
+	panel := httptest.NewRequest(http.MethodGet, "/panel", nil)
+	for _, c := range saved.Result().Cookies() {
+		panel.AddCookie(c)
+	}
+	e.ServeHTTP(httptest.NewRecorder(), panel)
+
+	if seenUser != 42 {
+		t.Errorf("the session lost its user after a flash containing a dot: UserID = %d, want 42", seenUser)
+	}
+	if seenFlash == "" {
+		t.Error("the flash message should still be readable")
+	}
+}
+
 func TestCSRFProtectsStateChangingMethods(t *testing.T) {
 	s := newSession()
 	csrf := NewCSRF()

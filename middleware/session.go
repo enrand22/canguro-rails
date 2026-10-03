@@ -105,11 +105,16 @@ func (s *Session) read(c echo.Context) sessionData {
 	if err != nil {
 		return sessionData{}
 	}
-	parts := strings.SplitN(string(raw), ".", 2)
-	if len(parts) != 2 {
+	// The payload is JSON and CAN contain dots — a flash like "total 3222.00", a
+	// date, an abbreviation. Splitting on the FIRST dot cut the payload in half, the
+	// signature stopped matching and the session read back empty: the user was
+	// logged out on the next click (found in production, payhub, 2-oct-2026).
+	// The signature is base64url (no dots), so the separator is the LAST dot.
+	idx := strings.LastIndex(string(raw), ".")
+	if idx < 0 {
 		return sessionData{}
 	}
-	payload, signature := parts[0], parts[1]
+	payload, signature := string(raw)[:idx], string(raw)[idx+1:]
 	if !hmac.Equal([]byte(signature), []byte(s.sign(payload))) {
 		return sessionData{} // tampered cookie
 	}
