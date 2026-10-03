@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -321,6 +323,48 @@ func TestRequestLoggerDoesNotChangeTheResponse(t *testing.T) {
 	}
 	if rec.Body.String() != "hola" {
 		t.Errorf("body = %q, want hola", rec.Body.String())
+	}
+}
+
+// Asserting only that the response is unchanged is not enough: the line has to say
+// something useful when there is an incident. An empty request_id (the middleware
+// wrote its id under a DIFFERENT key than the logger reads) and a duration in
+// nanoseconds both went unnoticed until this test existed.
+func TestRequestLoggerWritesWhatMatters(t *testing.T) {
+	var buf bytes.Buffer
+	e := echo.New()
+	e.Use(RequestID())
+	e.Use(RequestLogger(slog.New(slog.NewJSONHandler(&buf, nil))))
+	e.GET("/banco", func(c echo.Context) error { return c.NoContent(http.StatusTeapot) })
+
+	e.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/banco", nil))
+
+	var line map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
+		t.Fatalf("the log line is not JSON: %v — %s", err, buf.String())
+	}
+	if line["msg"] != "request" {
+		t.Errorf("msg = %v, want request", line["msg"])
+	}
+	if line["method"] != http.MethodGet || line["path"] != "/banco" {
+		t.Errorf("method/path = %v/%v, want GET//banco", line["method"], line["path"])
+	}
+	if line["status"] != float64(http.StatusTeapot) {
+		t.Errorf("status = %v, want 418", line["status"])
+	}
+
+	// The request id is what ties a user's report to this exact line.
+	if id, _ := line["request_id"].(string); id == "" {
+		t.Errorf("request_id is empty: the line cannot be matched to a report (%v)", line["request_id"])
+	}
+
+	// Milliseconds as a number: a Duration would be serialized as nanoseconds.
+	took, ok := line["took_ms"].(float64)
+	if !ok {
+		t.Fatalf("took_ms = %v (%T), want a number of milliseconds", line["took_ms"], line["took_ms"])
+	}
+	if took < 0 {
+		t.Errorf("took_ms = %v, want a sane duration", took)
 	}
 }
 

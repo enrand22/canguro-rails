@@ -101,7 +101,11 @@ func RequestLogger(logger *slog.Logger) echo.MiddlewareFunc {
 				"method", c.Request().Method,
 				"path", c.Request().URL.Path,
 				"status", status,
-				"took", time.Since(start).Round(time.Millisecond),
+				// Milliseconds as a number, not a time.Duration: slog serializes a
+				// Duration as NANOSECONDS (json.Marshal of a Duration), so a 1.5 ms
+				// page logged as "took":1500000 — unreadable, and rounded to whole
+				// milliseconds a fast page logged as a useless 0.
+				"took_ms", float64(time.Since(start).Microseconds())/1000.0,
 				"request_id", RequestIDFrom(c),
 			)
 			return err
