@@ -46,7 +46,8 @@ func Parse(name, version string, args []string) (Options, error) {
 	fs.BoolVar(&o.DryRun, "dry-run", false, "read everything, write nothing")
 	fs.BoolVar(&o.Version, "version", false, "print the version and exit")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "%s %s — usage:\n", name, version)
+		// La salida de un texto de ayuda no deja un error accionable.
+		_, _ = fmt.Fprintf(fs.Output(), "%s %s — usage:\n", name, version)
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

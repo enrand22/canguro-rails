@@ -29,7 +29,7 @@ help: ## Show this help
 setup: ## Install the development tools (templ, goose, golangci-lint)
 	go install github.com/a-h/templ/cmd/templ@latest
 	go install github.com/pressly/goose/v3/cmd/goose@latest
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	@echo "done: $(GOBIN)"
 
 build: ## Compile everything
@@ -54,7 +54,11 @@ cover: ## Coverage report; fails below $(COVER_MIN)%
 
 lint: ## go vet + golangci-lint (when installed) + gofmt check
 	go vet $(PKG)
-	@command -v $(GOBIN)/golangci-lint >/dev/null && $(GOBIN)/golangci-lint run ./... || echo "(golangci-lint not installed: run make setup)"
+	@if [ ! -x "$(GOBIN)/golangci-lint" ]; then \
+		echo "(golangci-lint not installed: run make setup — skipping)"; \
+	else \
+		$(GOBIN)/golangci-lint run ./... ; \
+	fi
 	@test -z "$$(gofmt -l . | grep -v '_templ.go' || true)" || (echo "unformatted files:"; gofmt -l . | grep -v '_templ.go'; exit 1)
 	@$(MAKE) --no-print-directory templates-tracked
 

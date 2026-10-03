@@ -1,0 +1,16 @@
+# Reglas de golangci-lint (v2). Este archivo viaja también en la plantilla, así que
+# un proyecto nuevo nace con las mismas reglas: `make lint` significa lo mismo en
+# todos lados.
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  exclusions:
+    rules:
+      # Cerrar un recurso de LECTURA —rows, resp.Body, un gzip que se descomprime, un
+      # archivo de tests— no deja un error accionable: los errores de iteración se ven
+      # en rows.Err(). Es una decisión (no un descuido), y por eso vive acá y no
+      # repartida en `//nolint` por todo el código.
+      - source: 'defer .*\.Close\(\)'
+        linters:
+          - errcheck

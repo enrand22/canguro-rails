@@ -96,28 +96,28 @@ func parseNew(args []string) (scaffoldOptions, error) {
 			return args[i], nil
 		}
 
-		switch {
-		case arg == "--module" || arg == "-m":
+		switch arg {
+		case "--module", "-m":
 			v, err := value()
 			if err != nil {
 				return opts, err
 			}
 			opts.Module = v
-		case arg == "--title" || arg == "-t":
+		case "--title", "-t":
 			v, err := value()
 			if err != nil {
 				return opts, err
 			}
 			opts.Title = v
-		case arg == "--kit":
+		case "--kit":
 			v, err := value()
 			if err != nil {
 				return opts, err
 			}
 			opts.KitVersion = v
-		case arg == "--no-tidy":
+		case "--no-tidy":
 			opts.Tidy = false
-		case arg == "-h" || arg == "--help":
+		case "-h", "--help":
 			fmt.Print(usage)
 			os.Exit(0)
 		default:
