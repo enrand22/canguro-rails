@@ -163,6 +163,45 @@ func TestFilesWithoutTheTmplSuffixAreCopiedVerbatim(t *testing.T) {
 	}
 }
 
+func TestGeneratedGitignoreIgnoresKamalSecrets(t *testing.T) {
+	// Kamal escribe `.kamal/secrets` con la DATABASE_URL de producción, el
+	// SESSION_SECRET y los tokens de aviso. Si la plantilla no lo ignora, el primer
+	// `git add -A` lo publica: pasó al generar canguro_site_go y hubo que reescribir
+	// el historial y rotar la password de la base.
+	opts := testOptions(t)
+	if err := scaffold(opts); err != nil {
+		t.Fatalf("scaffold: %v", err)
+	}
+
+	gitignore, err := os.ReadFile(filepath.Join(opts.Dir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Se compara la LÍNEA exacta, no una subcadena: `.kamal/secrets.*` también
+	// contiene ".kamal/secrets", así que un `strings.Contains` pasa aunque la regla
+	// que de verdad importa falte (comprobado quitando la línea: el test seguía en
+	// verde). Un test que no distingue eso no prueba nada.
+	if !hasExactLine(string(gitignore), ".kamal/secrets") {
+		t.Errorf("the generated .gitignore must ignore .kamal/secrets:\n%s", gitignore)
+	}
+	// Y no debe ignorar el archivo de plantilla del propio .env.example, que es el
+	// otro error caro de la misma familia (un proyecto sin .env.example).
+	if !hasExactLine(string(gitignore), "!.env.example.tmpl") {
+		t.Error("the generated .gitignore must keep the .env.example.tmpl exception")
+	}
+}
+
+// hasExactLine reports whether the text contains a line equal to want (ignoring
+// surrounding whitespace).
+func hasExactLine(text, want string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestScaffoldRefusesANonEmptyDirectory(t *testing.T) {
 	opts := testOptions(t)
 	if err := os.MkdirAll(opts.Dir, 0o755); err != nil {

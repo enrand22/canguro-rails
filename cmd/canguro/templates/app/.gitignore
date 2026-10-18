@@ -17,6 +17,14 @@ coverage.html
 # generated project would come out without .env.example.
 !.env.example.tmpl
 
+# Kamal secrets. Kamal crea `.kamal/secrets` al configurar el deploy y ahí van la
+# DATABASE_URL con la password de producción, el SESSION_SECRET y los tokens de
+# aviso: es el archivo más sensible del proyecto. Sin esta regla, el primer
+# `git add -A` lo sube al remoto (pasó al generar canguro_site_go, y hubo que
+# reescribir el historial y rotar la password de la base).
+.kamal/secrets
+.kamal/secrets.*
+
 # Logs
 log/
 *.log

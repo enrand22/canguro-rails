@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # main **y** master: `git init` en una máquina recién configurada todavía crea
+    # master, y con solo main el CI no corre nunca (pasó con canguro_site_go: el
+    # primer push no disparó nada y el deploy salió sin pasar por el CI).
+    branches: [main, master]
   pull_request:
 
 jobs:
