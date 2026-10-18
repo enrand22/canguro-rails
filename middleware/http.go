@@ -68,6 +68,32 @@ func Recover(logger *slog.Logger) echo.MiddlewareFunc {
 	}
 }
 
+// RequestLoggerSkip es RequestLogger pero **sin registrar** las rutas indicadas.
+//
+// Existe por el health check del balanceador: pega cada pocos segundos y con el log
+// completo se come el archivo. Medido en `mcp_go` el 18-oct-2026: **33 352 de 35 560
+// líneas (94 %)** eran `GET /healthz`, así que con `max-size=10m` la historia real
+// rotaba y se perdía. El health check **sí se atiende**, sólo no se registra.
+//
+//	// una app con /healthz esperando al proxy
+//	e.Use(middleware.RequestLoggerSkip(logger, "/healthz"))
+func RequestLoggerSkip(logger *slog.Logger, skip ...string) echo.MiddlewareFunc {
+	omitir := make(map[string]struct{}, len(skip))
+	for _, ruta := range skip {
+		omitir[ruta] = struct{}{}
+	}
+	registra := RequestLogger(logger)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		conLog := registra(next)
+		return func(c echo.Context) error {
+			if _, ok := omitir[c.Request().URL.Path]; ok {
+				return next(c)
+			}
+			return conLog(c)
+		}
+	}
+}
+
 // RequestLogger logs one line per request with what actually matters when
 // something is slow: method, path, status and duration. The request id ties it to
 // the client's report.
