@@ -41,7 +41,16 @@ jobs:
           cache: true
 
       - name: Install tools
-        run: go install github.com/a-h/templ/cmd/templ@latest github.com/pressly/goose/v3/cmd/goose@latest
+        # La versión de templ sale del go.mod, no de @latest: con @latest el generador
+        # se adelanta al módulo y el step "templ files are up to date" falla sin que
+        # nadie haya tocado un .templ.
+        #
+        # Y van en DOS comandos: en uno solo, Go exige que todos los paquetes sean del
+        # mismo módulo y la misma versión ("all arguments must refer to packages in the
+        # same module at the same version"), y estos son módulos distintos.
+        run: |
+          go install github.com/a-h/templ/cmd/templ@$(go list -m -f '{{.Version}}' github.com/a-h/templ)
+          go install github.com/pressly/goose/v3/cmd/goose@latest
 
       - name: Migrate the database
         run: $(go env GOPATH)/bin/goose -dir migrations mysql "$DATABASE_URL" up
