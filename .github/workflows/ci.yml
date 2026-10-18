@@ -39,7 +39,11 @@ jobs:
           cache: true
 
       - name: Install tools
-        run: go install github.com/a-h/templ/cmd/templ@latest
+        # Versión FIJADA a la del go.mod: con @latest el generador se adelanta solo
+        # y el chequeo "templ files are up to date" empieza a fallar sin que nadie
+        # haya tocado un .templ (pasó el 18-oct-2026, con el generador en 0.3.1070 y
+        # el go.mod en 0.3.1020). Al subir templ en go.mod, subir también esta línea.
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
 
       - name: Templ files are up to date
         run: |
