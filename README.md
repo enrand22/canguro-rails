@@ -11,7 +11,7 @@ about background work (**a bounded pool, not loose goroutines**).
 
 ---
 
-## What's in the box — `v0.3.1`
+## What's in the box — `v0.4.0`
 
 ### The core (no HTTP dependency at all)
 
@@ -33,6 +33,7 @@ about background work (**a bounded pool, not loose goroutines**).
 | `web` | First-class templ + htmx. `Render` detects `HX-Request` and returns **the fragment or the full page from the same handler**; helpers for the htmx answers that matter (`HXRedirect`, `HXTrigger`, `HXPushURL`, retarget/reswap, out-of-band) and `RenderInvalid`, which returns **422 with the form re-rendered** — server-side validation with zero hand-written JavaScript. |
 | `web/components` | `Flash`, `Field`, `Table`, `EmptyState`, `Pagination`, `ConfirmButton`: the htmx attributes live **in one place** instead of being copied into every template. |
 | `middleware` | Signed-cookie session (no session table), CSRF double-submit that also reads the header htmx sends, request id, panic recovery with stack, and request logging. |
+| `realtime` | A WebSocket hub for the things that cannot wait for the next poll: authenticated channels (`Subject{ID, Channels}`), ping/pong, and **slow clients dropped instead of blocking `Publish`**. Polling stays as the fallback; the durable copy lives in your database. |
 | `testsupport` | Test database bootstrap that **cannot silently skip**: with `REQUIRE_DB=1` a missing database is a failure, not a skip. |
 | assets | A neutral starter design system and htmx 2.0.4 **vendored** (embedded in the binary): no CDN, works offline, no third party deciding what your app runs. |
 
