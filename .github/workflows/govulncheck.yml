@@ -1,0 +1,51 @@
+name: govulncheck
+
+on:
+  schedule:
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Instalar govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Escanear
+        id: scan
+        run: |
+          set +e
+          "$(go env GOPATH)/bin/govulncheck" ./... > report.txt 2>&1
+          cat report.txt
+          if grep -q "No vulnerabilities found" report.txt; then
+            echo "clean=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=no" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reportar en issue
+        if: steps.scan.outputs.clean == 'no'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create security-scan --color B60205 --description "hallazgos de govulncheck" 2>/dev/null || true
+          {
+            echo "Barrido programado de govulncheck."
+            echo
+            echo '```'
+            head -c 60000 report.txt
+            echo '```'
+          } > body.md
+          existing=$(gh issue list --label security-scan --state open --limit 1 --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "govulncheck: hallazgos $(date -u +%F)" --label security-scan --body-file body.md
+          fi
